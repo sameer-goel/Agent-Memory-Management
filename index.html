@@ -1,0 +1,1209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Agent Memory Management</title>
+  <style>
+    :root {
+      --bg: #0a0a0a;
+      --surface: #111111;
+      --border: #1f1f1f;
+      --text: #f0f0f0;
+      --muted: #555555;
+      --accent: #6366f1;
+      --green: #4ade80;
+      --amber: #f59e0b;
+      --red: #f87171;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: system-ui, -apple-system, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      min-height: 100vh;
+    }
+    a { text-decoration: none; color: inherit; cursor: pointer; }
+    button { cursor: pointer; font-family: inherit; border: none; background: none; }
+    input[type="range"] { width: 100%; accent-color: #6366f1; cursor: pointer; }
+    input[type="text"], input[type="password"] {
+      font-family: inherit;
+      background: var(--surface);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px 12px;
+      font-size: 13px;
+      width: 100%;
+    }
+    input[type="text"]:focus, input[type="password"]:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+    pre { font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace; }
+
+    /* Layout */
+    .page-sidebar { display: flex; min-height: 100vh; }
+
+    /* Sidebar */
+    .sidebar {
+      width: 224px;
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+      padding: 24px 16px;
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      overflow-y: auto;
+      border-right: 1px solid var(--border);
+      background: var(--surface);
+    }
+    .sidebar-logo {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      color: white;
+      margin-bottom: 24px;
+      display: block;
+      transition: color 0.15s;
+    }
+    .sidebar-logo:hover { color: var(--accent); }
+    .sidebar-nav { flex: 1; }
+    .sidebar-mod {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px;
+      border-radius: 8px;
+      font-size: 11px;
+      transition: background 0.15s;
+      margin-bottom: 2px;
+      cursor: pointer;
+    }
+    .sidebar-mod:hover { background: rgba(255,255,255,0.04); }
+    .sidebar-dot {
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      font-size: 7px;
+      min-width: 16px;
+    }
+    .sidebar-steps {
+      margin-left: 26px;
+      margin-bottom: 4px;
+      border-left: 1px solid var(--border);
+      padding-left: 12px;
+    }
+    .sidebar-step {
+      font-size: 10px;
+      padding: 4px 0;
+      line-height: 1.3;
+    }
+    .sidebar-footer {
+      margin-top: 16px;
+      padding-top: 16px;
+      border-top: 1px solid var(--border);
+      font-size: 11px;
+      color: var(--muted);
+      text-align: center;
+    }
+
+    /* Main content */
+    .main { flex: 1; overflow-y: auto; }
+    .main-inner { max-width: 640px; margin: 0 auto; padding: 40px 32px; }
+    .main-inner > * + * { margin-top: 28px; }
+
+    /* Tag */
+    .tag {
+      display: inline-block;
+      font-size: 11px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-weight: 500;
+    }
+
+    /* Slide */
+    .slide-heading { font-size: 30px; font-weight: 900; line-height: 1.2; }
+    .slide-body p { font-size: 14px; line-height: 1.7; color: rgba(255,255,255,0.65); }
+    .slide-body p + p { margin-top: 12px; }
+
+    /* Card */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px;
+    }
+
+    /* Home header */
+    .home-header {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      backdrop-filter: blur(8px);
+      background: rgba(10,10,10,0.9);
+      border-bottom: 1px solid var(--border);
+    }
+    .home-header-inner {
+      max-width: 768px;
+      margin: 0 auto;
+      padding: 16px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .xp-bar-track {
+      width: 96px;
+      height: 4px;
+      border-radius: 999px;
+      background: var(--border);
+      margin-top: 4px;
+    }
+    .xp-bar-fill {
+      height: 100%;
+      border-radius: 999px;
+      background: var(--accent);
+      transition: width 0.3s;
+    }
+    .home-main { max-width: 768px; margin: 0 auto; padding: 48px 24px; }
+    .home-main > * + * { margin-top: 48px; }
+
+    /* Buttons */
+    .btn {
+      display: inline-block;
+      padding: 10px 20px;
+      border-radius: 12px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      transition: opacity 0.15s;
+      font-family: inherit;
+    }
+    .btn:hover { opacity: 0.88; }
+    .btn-primary { background: var(--accent); color: white; }
+    .btn-secondary { background: var(--surface); border: 1px solid var(--border) !important; color: var(--muted); }
+
+    /* Module list */
+    .mod-row {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 16px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      transition: opacity 0.15s;
+      margin-bottom: 8px;
+      cursor: pointer;
+    }
+    .mod-row:hover { opacity: 0.88; }
+    .mod-icon {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    /* Slide image */
+    .slide-image {
+      border-radius: 12px;
+      overflow: hidden;
+      border: 1px solid var(--border);
+      max-width: 320px;
+    }
+    .slide-image img { width: 100%; height: auto; display: block; }
+
+    /* Slide nav */
+    .slide-nav {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding-top: 16px;
+      border-top: 1px solid var(--border);
+    }
+    .nav-btn {
+      font-size: 13px;
+      padding: 8px 16px;
+      border-radius: 8px;
+      background: var(--surface);
+      border: 1px solid var(--border) !important;
+      color: var(--muted);
+      transition: color 0.15s;
+      cursor: pointer;
+      font-family: inherit;
+    }
+    .nav-btn:hover { color: var(--text); }
+    .nav-btn-primary {
+      background: var(--accent) !important;
+      color: white !important;
+      border: none !important;
+      font-weight: 600;
+      padding: 8px 20px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-family: inherit;
+      cursor: pointer;
+    }
+    .nav-btn-primary:hover { opacity: 0.88; }
+    .dots { display: flex; gap: 6px; align-items: center; }
+    .dot {
+      border-radius: 999px;
+      height: 6px;
+      transition: all 0.2s;
+      border: none;
+      cursor: pointer;
+      padding: 0;
+    }
+
+    /* Quiz */
+    .quiz-opt {
+      width: 100%;
+      text-align: left;
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      padding: 12px 16px;
+      border-radius: 12px;
+      font-size: 13px;
+      transition: background 0.15s, border-color 0.15s;
+      margin-bottom: 8px;
+      cursor: pointer;
+      font-family: inherit;
+    }
+    .quiz-opt:disabled { cursor: not-allowed; }
+    .quiz-letter {
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      font-weight: 700;
+      flex-shrink: 0;
+      margin-top: 2px;
+      min-width: 20px;
+    }
+    .quiz-submit {
+      width: 100%;
+      padding: 10px;
+      border-radius: 12px;
+      font-size: 13px;
+      font-weight: 600;
+      border: none;
+      cursor: pointer;
+      font-family: inherit;
+    }
+    .quiz-submit:disabled { opacity: 0.3; cursor: not-allowed; }
+    .quiz-result {
+      border-radius: 12px;
+      padding: 16px;
+      font-size: 13px;
+      margin-top: 8px;
+    }
+
+    /* Interactive */
+    .mem-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+    .mem-slot {
+      border-radius: 8px;
+      padding: 6px;
+      text-align: center;
+      transition: all 0.2s;
+      border: 1px solid transparent;
+    }
+    .msg-grid { display: grid; grid-template-columns: repeat(10, 1fr); gap: 4px; }
+    .msg-slot {
+      border-radius: 4px;
+      padding: 6px 0;
+      text-align: center;
+      transition: all 0.15s;
+      border: 1px solid transparent;
+      font-size: 9px;
+    }
+
+    /* Prompt builder */
+    .fact-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+    @media (min-width: 480px) { .fact-grid { grid-template-columns: repeat(3, 1fr); } }
+    .fact-btn {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 12px;
+      border-radius: 12px;
+      font-size: 11px;
+      font-weight: 500;
+      text-align: left;
+      transition: all 0.15s;
+      cursor: pointer;
+      font-family: inherit;
+    }
+
+    /* Done screen */
+    .done-screen {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 32px;
+      gap: 24px;
+    }
+
+    /* Coming soon */
+    .coming-soon {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      gap: 16px;
+      padding: 32px;
+    }
+
+    /* Range label row */
+    .range-labels {
+      display: flex;
+      justify-content: space-between;
+      font-size: 11px;
+      margin-top: 4px;
+      color: var(--muted);
+    }
+
+    /* Section header */
+    .section-label {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+  </style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+// ============================================================
+// DATA
+// ============================================================
+
+const MODULES = [
+  { type:"lesson",  id:"0", hash:"lesson-0",  title:"The Why",                    subtitle:"Why agents forget and why it matters",       xp:50,  color:"#6366f1" },
+  { type:"mission", id:"1", hash:"mission-1", title:"Mission 1: In-Context Memory",subtitle:"Context windows, overflow, system prompts",  xp:100, color:"#f59e0b" },
+  { type:"mission", id:"2", hash:"mission-2", title:"Mission 2: External Memory",  subtitle:"Persist facts across sessions",              xp:120, color:"#818cf8" },
+  { type:"mission", id:"3", hash:"mission-3", title:"Mission 3: Semantic Retrieval",subtitle:"Find relevant memories from thousands",     xp:150, color:"#4ade80" },
+  { type:"mission", id:"4", hash:"mission-4", title:"Mission 4: Compression",      subtitle:"Summarize old memories intelligently",       xp:150, color:"#f87171" },
+  { type:"mission", id:"5", hash:"mission-5", title:"Mission 5: Tiered Memory",    subtitle:"4-layer memory architecture",               xp:175, color:"#c084fc" },
+  { type:"mission", id:"6", hash:"mission-6", title:"Mission 6: Multi-Agent Memory",subtitle:"Share memory across agent teams",          xp:200, color:"#38bdf8" },
+  { type:"mission", id:"7", hash:"mission-7", title:"Mission 7: Eviction Policies",subtitle:"Decide what to keep and what to forget",    xp:175, color:"#fb923c" },
+  { type:"mission", id:"8", hash:"mission-8", title:"Mission 8: Complete System",  subtitle:"Build a production-ready memory system",    xp:500, color:"#fbbf24", boss:true },
+];
+
+const TOTAL_XP = MODULES.reduce((s,m) => s + m.xp, 0);
+
+const L0_SLIDES = [
+  { id:"working-memory", agenda:"Working memory",   tag:"your brain",    tagColor:"#f59e0b", heading:"Your brain has a buffer.", body:"It holds about 7 things at once. When it fills up, the oldest item gets dropped to make room.\n\nDrag the slider to fill it up.", visual:"working-memory", image:"images/scene-0a.png" },
+  { id:"stateless",      agenda:"Stateless machine",tag:"AI agents",     tagColor:"#818cf8", heading:"AI agents have the same limit.", body:"Every message in a conversation fills one slot in the AI's context window. When it fills up, old messages get pushed out — including your name.\n\nSend 20 messages and watch what happens.", visual:"stateless", image:"images/scene-0b.png" },
+  { id:"hallucination",  agenda:"The real danger",  tag:"hallucination", tagColor:"#f87171", heading:"But AI never says 'I forgot'.", body:"When you forget, you admit it. When an AI forgets, it invents a plausible answer and delivers it with full confidence.\n\nWrong and confident is more dangerous than simply wrong.", visual:"hallucination", image:"images/scene-0c.png" },
+  { id:"evidence",       agenda:"The evidence",     tag:"research",      tagColor:"#4ade80", heading:"This is not theoretical.", body:"Real companies lose money because of this. Real users trust wrong answers. The research is clear.", visual:"stats" },
+  { id:"why-you",        agenda:"Why you",          tag:"builders",      tagColor:"#c084fc", heading:"You are going to build agents.", body:"Every agent you build starts stateless. It forgets by default. It hallucinates when context is missing.\n\nThis course teaches you how to fix all three — one mission at a time.", visual:"none" },
+  { id:"quiz-1",         agenda:"Quick check",      tag:"quiz",          tagColor:"#6366f1", heading:"What happens when the context window fills up?", body:"", visual:"quiz-1" },
+  { id:"quiz-2",         agenda:"The danger",       tag:"quiz",          tagColor:"#f87171", heading:"Why is AI forgetting more dangerous than human forgetting?", body:"", visual:"quiz-2" },
+];
+
+const L0_QUIZZES = {
+  "quiz-1": {
+    options:["The AI asks you to repeat yourself","Old messages get dropped and the AI hallucinates","The AI pauses and requests more memory","The conversation resets automatically"],
+    correct:1,
+    explanation:"Context windows are FIFO: oldest message out first. The AI never warns you. It just starts making things up."
+  },
+  "quiz-2": {
+    options:["AI is slower to respond when it forgets","AI hallucinates confidently, humans admit honestly","AI uses more memory than humans","AI cannot be corrected after forgetting"],
+    correct:1,
+    explanation:"When a human forgets, they say so. You know not to trust the answer. When AI forgets, it outputs a confident wrong answer you might believe."
+  }
+};
+
+const M1_SLIDES = [
+  { id:"context",  agenda:"What is context?", tag:"concept",    tagColor:"#f59e0b", heading:"Context is the AI's meeting room.", body:"When you attend a meeting, you can answer questions using everything said before. That history is your context.\n\nBOLT has the same thing: a context window. Every message in the conversation fills one slot. But the room has a limited number of seats.", visual:"none", image:"images/scene-m1-meeting.png" },
+  { id:"demo",     agenda:"Watch it fill",    tag:"interactive",tagColor:"#818cf8", heading:"Drag to fill the context window.", body:"Your name is in message 1. Drag to 20 messages and watch it disappear.", visual:"context-demo", image:"images/scene-0b.png" },
+  { id:"problem",  agenda:"The overflow",     tag:"problem",    tagColor:"#f87171", heading:"The oldest message always gets dropped.", body:"This is not a bug. It is how context windows work. There is no special treatment for important facts.\n\nYour name, your preferences, your account details — all treated the same as any other message. First in, first out.", visual:"none", image:"images/scene-m1-overflow.png" },
+  { id:"quiz-1",   agenda:"Quick check",      tag:"quiz",       tagColor:"#f59e0b", heading:"You tell the AI your name in message 1. You send 19 more messages. What happens?", body:"", visual:"quiz-1" },
+  { id:"fix",      agenda:"The fix",          tag:"solution",   tagColor:"#4ade80", heading:"The sticky note trick.", body:"The system prompt is a string the AI reads before every single message. It never scrolls out of the context window.\n\nPinning key facts to the system prompt is like writing them on a sticky note and taping it to the top of the whiteboard — always visible, never pushed off.", visual:"sticky-note", image:"images/scene-m1-sticky.png" },
+  { id:"quiz-2",   agenda:"Confirm the fix",  tag:"quiz",       tagColor:"#4ade80", heading:"What does adding a system prompt actually do?", body:"", visual:"quiz-2" },
+  { id:"build",    agenda:"Build it",         tag:"hands-on",   tagColor:"#c084fc", heading:"Build your first system prompt.", body:"", visual:"builder" },
+];
+
+const M1_QUIZZES = {
+  "quiz-1": {
+    options:["The AI keeps your name. Important facts are never dropped.","The AI asks you to confirm your name again.","Your name gets pushed out and the AI hallucinates when asked.","The AI compresses old messages to make space."],
+    correct:2,
+    explanation:"Context windows are FIFO: oldest out first. No fact is protected. Your name is treated the same as any other message."
+  },
+  "quiz-2": {
+    options:["It gives the AI a larger context window.","It pins facts above the context window so they are never pushed out.","It repeats your name in every message automatically.","It compresses old messages before they are dropped."],
+    correct:1,
+    explanation:"The system prompt lives above the scrolling context window. It is always visible to the AI regardless of how many messages have been sent."
+  }
+};
+
+const PROMPT_FACTS = [
+  { id:"name",    label:"User's name",   value:"The user's name is Human.",                  color:"#f59e0b" },
+  { id:"tone",    label:"Friendly tone", value:"Always respond in a friendly tone.",          color:"#818cf8" },
+  { id:"memory",  label:"Never forget",  value:"Never say you do not know the user's name.", color:"#4ade80" },
+  { id:"tier",    label:"Account tier",  value:"The user has a Premium account.",            color:"#c084fc" },
+  { id:"brevity", label:"Be concise",    value:"Keep answers under 3 sentences.",            color:"#38bdf8" },
+];
+
+// ============================================================
+// PROGRESS (localStorage)
+// ============================================================
+
+function getProgress() {
+  try { return JSON.parse(localStorage.getItem('amc-progress') || 'null') || { completedLessons:[], completedMissions:[], xp:0 }; }
+  catch { return { completedLessons:[], completedMissions:[], xp:0 }; }
+}
+function saveProgress(p) { localStorage.setItem('amc-progress', JSON.stringify(p)); }
+function completeLesson(id, xp) {
+  const p = getProgress();
+  if (!p.completedLessons.includes(id)) { p.completedLessons.push(id); p.xp += xp; }
+  saveProgress(p); return p;
+}
+function completeMission(id, xp) {
+  const p = getProgress();
+  const n = Number(id);
+  if (!p.completedMissions.includes(n)) { p.completedMissions.push(n); p.xp += xp; }
+  saveProgress(p); return p;
+}
+
+function getApiKey() { return localStorage.getItem('amc-api-key') || ''; }
+function setApiKey(k) { localStorage.setItem('amc-api-key', k.trim()); }
+
+// ============================================================
+// HELPERS
+// ============================================================
+
+function h(str) {
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function navigate(hash) { location.hash = hash; }
+
+function hexAlpha(hex, alpha) {
+  const r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
+// ============================================================
+// SIDEBAR HTML
+// ============================================================
+
+function sidebarHTML(activeHash, steps, xpLabel) {
+  const p = getProgress();
+  let modsHTML = '';
+  MODULES.forEach(mod => {
+    const done = mod.type==='lesson' ? p.completedLessons.includes(mod.id) : p.completedMissions.includes(Number(mod.id));
+    const active = activeHash === mod.hash;
+    const dotBg = done ? '#4ade80' : active ? mod.color : 'var(--border)';
+    const dotColor = (done || active) ? '#000' : 'transparent';
+    const textColor = active ? mod.color : done ? '#4ade80' : 'var(--muted)';
+    const modBg = active ? hexAlpha(mod.color, 0.08) : 'transparent';
+
+    modsHTML += `
+      <div class="sidebar-mod" style="background:${modBg};color:${textColor}" onclick="navigate('#${mod.hash}')">
+        <div class="sidebar-dot" style="background:${dotBg};color:${dotColor}">${done?'✓':''}</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
+            ${h(mod.type==='lesson'?'Lesson '+mod.id:'Mission '+mod.id)}
+            ${mod.boss?'<span style="font-size:8px;padding:1px 4px;border-radius:3px;background:#92400e;color:#fcd34d;margin-left:4px">BOSS</span>':''}
+          </div>
+          <div style="font-size:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:${active?hexAlpha(mod.color,0.6):'rgba(255,255,255,0.2)'}">${h(mod.title.replace(/Mission \d+: /,''))}</div>
+        </div>
+      </div>`;
+
+    if (active && steps && steps.length) {
+      modsHTML += '<div class="sidebar-steps">';
+      steps.forEach(s => {
+        const c = s.active ? 'var(--text)' : s.done ? 'rgba(74,222,128,0.5)' : 'var(--muted)';
+        modsHTML += `<div class="sidebar-step" style="color:${c}">${s.done?'✓ ':s.active?'› ':''}${h(s.label)}</div>`;
+      });
+      modsHTML += '</div>';
+    }
+  });
+
+  return `
+    <aside class="sidebar">
+      <a class="sidebar-logo" onclick="navigate('#home')">Agent Memory Class</a>
+      <nav class="sidebar-nav">${modsHTML}</nav>
+      ${xpLabel ? `<div class="sidebar-footer">${h(xpLabel)}</div>` : ''}
+    </aside>`;
+}
+
+// ============================================================
+// HOME PAGE
+// ============================================================
+
+function renderHome() {
+  const p = getProgress();
+  const pct = Math.round((p.xp / TOTAL_XP) * 100);
+  const started = p.completedLessons.length > 0 || p.completedMissions.length > 0;
+  const done = p.completedLessons.length + p.completedMissions.length;
+
+  let modsHTML = '';
+  MODULES.forEach((mod, i) => {
+    const isDone = mod.type==='lesson' ? p.completedLessons.includes(mod.id) : p.completedMissions.includes(Number(mod.id));
+    const prev = i===0 ? true : (() => {
+      const pm = MODULES[i-1];
+      return pm.type==='lesson' ? p.completedLessons.includes(pm.id) : p.completedMissions.includes(Number(pm.id));
+    })();
+    const unlocked = isDone || prev;
+    const iconBg = isDone ? mod.color : unlocked ? hexAlpha(mod.color, 0.13) : 'var(--border)';
+    const iconColor = isDone ? '#000' : mod.color;
+    const rowBg = isDone ? hexAlpha(mod.color, 0.06) : 'var(--surface)';
+    const rowBorder = isDone ? hexAlpha(mod.color, 0.27) : 'var(--border)';
+    const titleColor = isDone ? mod.color : 'var(--text)';
+
+    modsHTML += `
+      <div class="mod-row" style="background:${rowBg};border-color:${rowBorder};opacity:${unlocked?1:0.4};pointer-events:${unlocked?'auto':'none'}"
+           onclick="navigate('#${mod.hash}')">
+        <div class="mod-icon" style="background:${iconBg};color:${iconColor}">
+          ${isDone ? '✓' : mod.boss ? '★' : String(i)}
+        </div>
+        <div style="flex:1;min-width:0">
+          <p style="font-size:13px;font-weight:600;color:${titleColor}">
+            ${h(mod.title)}
+            ${mod.boss?'<span style="font-size:10px;padding:2px 6px;border-radius:4px;font-weight:700;background:#92400e;color:#fcd34d;margin-left:6px">BOSS</span>':''}
+          </p>
+          <p style="font-size:11px;margin-top:2px;color:var(--muted)">${h(mod.subtitle)}</p>
+        </div>
+        <span style="font-size:11px;flex-shrink:0;padding:4px 8px;border-radius:999px;background:${isDone?hexAlpha(mod.color,0.13):'var(--border)'};color:${isDone?mod.color:'var(--muted)'}">${isDone?'✓ ':''}${mod.xp} XP</span>
+      </div>`;
+  });
+
+  document.getElementById('app').innerHTML = `
+    <div>
+      <header class="home-header">
+        <div class="home-header-inner">
+          <div>
+            <h1 style="font-size:13px;font-weight:700;letter-spacing:-0.02em">Agent Memory Management</h1>
+            <p style="font-size:11px;color:var(--muted);margin-top:2px">Interactive Course</p>
+          </div>
+          <div style="text-align:right">
+            <p style="font-size:11px;color:var(--muted)">${p.xp} / ${TOTAL_XP} XP</p>
+            <div class="xp-bar-track"><div class="xp-bar-fill" style="width:${pct}%"></div></div>
+          </div>
+        </div>
+      </header>
+
+      <main class="home-main">
+        <section>
+          <h2 style="font-size:36px;font-weight:900;line-height:1.2;margin-bottom:16px">
+            How do AI agents<br>
+            <span style="color:var(--accent)">actually remember things?</span>
+          </h2>
+          <p style="font-size:14px;color:rgba(255,255,255,0.55);max-width:480px;line-height:1.7;margin-bottom:20px">
+            Every AI agent starts with no memory. By the end of this course,
+            you will know how to build one that remembers, retrieves, and forgets intelligently.
+          </p>
+          ${!started
+            ? `<button class="btn btn-primary" onclick="navigate('#lesson-0')">Start Course</button>`
+            : `<div style="display:flex;gap:12px;align-items:center">
+                 <button class="btn btn-primary" onclick="navigate('#lesson-0')">Continue</button>
+                 <span style="font-size:11px;color:var(--muted)">${done} / ${MODULES.length} modules done</span>
+               </div>`
+          }
+        </section>
+
+        <section>
+          <p class="section-label" style="margin-bottom:12px">Course Modules</p>
+          ${modsHTML}
+        </section>
+
+        <section class="card">
+          <p style="font-size:11px;font-weight:600;color:var(--accent)">Setup required for interactive exercises</p>
+          <p style="font-size:11px;color:var(--muted);margin-top:8px;line-height:1.6">
+            Mission 1 includes a live AI exercise. Enter your Anthropic API key when prompted.
+            Your key is stored only in your browser's localStorage and never sent anywhere except directly to Anthropic.
+          </p>
+        </section>
+      </main>
+    </div>`;
+}
+
+// ============================================================
+// QUIZ WIDGET
+// ============================================================
+
+function quizHTML(quizId, quizzes, state) {
+  const q = quizzes[quizId];
+  const sel = state.answers[quizId] ?? null;
+  const sub = state.submitted[quizId] ?? false;
+  let optsHTML = '';
+  q.options.forEach((opt, i) => {
+    const isCorrect = i === q.correct;
+    const isSel = sel === i;
+    let bg = 'var(--surface)', border = 'var(--border)', color = 'var(--text)';
+    if (sub && isCorrect) { bg='#052e16'; border='#16a34a'; color='#86efac'; }
+    else if (sub && isSel) { bg='#1f0707'; border='var(--red)'; color='#fca5a5'; }
+    else if (!sub && isSel) { bg='#1e1b4b'; border='var(--accent)'; }
+    optsHTML += `
+      <button class="quiz-opt" ${sub?'disabled':''} style="background:${bg};border:1px solid ${border};color:${color}"
+              onclick="quizSelect('${quizId}',${i})">
+        <span class="quiz-letter" style="border:1.5px solid ${border};color:${border}">${String.fromCharCode(65+i)}</span>
+        ${h(opt)}
+      </button>`;
+  });
+
+  return `
+    <div id="quiz-${quizId}">
+      ${optsHTML}
+      ${!sub
+        ? `<button class="quiz-submit" onclick="quizSubmit('${quizId}')" ${sel===null?'disabled':''} style="background:${quizzes[quizId]?'var(--accent)':'#f59e0b'};color:#000">Submit</button>`
+        : `<div class="quiz-result" style="background:${sel===q.correct?'#052e16':'#1c0f00'};border:1px solid ${sel===q.correct?'#16a34a':'#f59e0b'}">
+             <span style="font-weight:600">${sel===q.correct?'Correct. ':'Not quite. '}</span>
+             <span style="color:rgba(255,255,255,0.65)">${h(q.explanation)}</span>
+           </div>`
+      }
+    </div>`;
+}
+
+// ============================================================
+// LESSON 0
+// ============================================================
+
+let L0 = { slide:0, wm:4, sm:1, answers:{}, submitted:{}, done:false };
+
+function initLesson0() { renderLesson0(); }
+
+function renderLesson0() {
+  if (L0.done) { renderL0Done(); return; }
+  const s = L0_SLIDES[L0.slide];
+  const isLast = L0.slide === L0_SLIDES.length - 1;
+  const steps = L0_SLIDES.map((sl, i) => ({ label:sl.agenda, active:i===L0.slide, done:i<L0.slide }));
+
+  let visual = '';
+  if (s.visual === 'working-memory') visual = wmVizHTML(L0.wm);
+  else if (s.visual === 'stateless')  visual = statelessVizHTML(L0.sm);
+  else if (s.visual === 'hallucination') visual = hallucinationHTML();
+  else if (s.visual === 'stats') visual = statsHTML();
+  else if (s.visual === 'quiz-1' || s.visual === 'quiz-2') visual = quizHTML(s.visual, L0_QUIZZES, L0);
+
+  const navRight = isLast
+    ? `<button class="nav-btn-primary" onclick="l0Finish()">Complete Lesson 0</button>`
+    : `<button class="nav-btn" onclick="l0Go(${L0.slide+1})">Next</button>`;
+
+  document.getElementById('app').innerHTML = `
+    <div class="page-sidebar">
+      ${sidebarHTML('lesson-0', steps, '+50 XP on complete')}
+      <main class="main">
+        <div class="main-inner">
+          <div>
+            <span class="tag" style="background:${hexAlpha(s.tagColor,0.1)};color:${s.tagColor}">${h(s.tag)}</span>
+            <h1 class="slide-heading" style="margin-top:12px">${h(s.heading)}</h1>
+          </div>
+          ${s.body ? `<div class="slide-body">${s.body.split('\n\n').map(p=>`<p>${h(p)}</p>`).join('')}</div>` : ''}
+          ${s.image ? `<div class="slide-image"><img src="${h(s.image)}" alt="" loading="lazy"></div>` : ''}
+          ${visual ? `<div>${visual}</div>` : ''}
+          <div class="slide-nav">
+            <button class="nav-btn" onclick="l0Go(${L0.slide-1})" style="opacity:${L0.slide===0?0:1};pointer-events:${L0.slide===0?'none':'auto'}">Previous</button>
+            <div class="dots">${L0_SLIDES.map((_,i)=>`<button class="dot" onclick="l0Go(${i})" style="width:${i===L0.slide?'20px':'6px'};background:${i<L0.slide?'#4ade80':i===L0.slide?s.tagColor:'var(--border)'}"></button>`).join('')}</div>
+            ${navRight}
+          </div>
+        </div>
+      </main>
+    </div>`;
+
+  if (s.visual === 'working-memory') attachWmEvents();
+  if (s.visual === 'stateless')      attachSmEvents();
+}
+
+function renderL0Done() {
+  document.getElementById('app').innerHTML = `
+    <div class="done-screen">
+      <div style="font-size:48px">🧠</div>
+      <div>
+        <h2 style="font-size:24px;font-weight:900">You know the why.</h2>
+        <p style="font-size:13px;margin-top:6px;color:var(--muted)">Stateless machines. Context overflow. Hallucination. Memory fixes all three.</p>
+      </div>
+      <div style="padding:10px 20px;border-radius:12px;background:#1e1b4b;color:var(--accent);font-size:13px;font-weight:600">+50 XP earned</div>
+      <div style="display:flex;gap:12px">
+        <button class="btn btn-secondary" onclick="navigate('#home')">Course home</button>
+        <button class="btn btn-primary" onclick="navigate('#mission-1')">Mission 1: In-Context Memory</button>
+      </div>
+    </div>`;
+}
+
+function l0Go(i) { L0.slide = Math.max(0, Math.min(L0_SLIDES.length-1, i)); renderLesson0(); }
+
+function quizSelect(qid, opt) {
+  const page = location.hash.slice(1);
+  if (page === 'lesson-0') {
+    if (L0.submitted[qid]) return;
+    L0.answers[qid] = opt;
+    renderLesson0();
+  } else if (page === 'mission-1') {
+    if (M1.submitted[qid]) return;
+    M1.answers[qid] = opt;
+    renderMission1();
+  }
+}
+
+function quizSubmit(qid) {
+  const page = location.hash.slice(1);
+  if (page === 'lesson-0') {
+    if (L0.answers[qid] === null || L0.answers[qid] === undefined) return;
+    L0.submitted[qid] = true;
+    renderLesson0();
+  } else if (page === 'mission-1') {
+    if (M1.answers[qid] === null || M1.answers[qid] === undefined) return;
+    M1.submitted[qid] = true;
+    renderMission1();
+  }
+}
+
+async function l0Finish() {
+  completeLesson('0', 50);
+  L0.done = true;
+  renderL0Done();
+}
+
+// ── Working Memory Viz ──────────────────────────────────────
+
+const WM_SLOTS = ["meeting topic","last speaker","action item","deadline","your point","their name","the question"];
+
+function wmVizHTML(filled) {
+  let slots = '';
+  WM_SLOTS.forEach((label, i) => {
+    const on = i < filled;
+    const first = i === 0;
+    const bg = on ? (first ? 'var(--accent)' : 'var(--surface)') : 'rgba(255,255,255,0.03)';
+    const border = on ? (first ? 'var(--accent)' : 'var(--border)') : 'rgba(255,255,255,0.05)';
+    const color = on ? (first ? '#fff' : 'var(--muted)') : 'transparent';
+    slots += `<div class="mem-slot" style="background:${bg};border-color:${border}"><div style="font-size:9px;color:${color};line-height:1.2">${h(label)}</div></div>`;
+  });
+  return `
+    <div class="card" id="wm-viz">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+        <span style="font-size:11px;font-weight:600;color:var(--accent)">Your working memory</span>
+        <span style="font-size:11px;color:${filled>=7?'var(--red)':'var(--muted)'}">${filled} / 7 slots used</span>
+      </div>
+      <div class="mem-grid">${slots}</div>
+      ${filled>=7?`<p style="font-size:11px;color:var(--red);margin-top:12px">Memory full. Oldest item dropped to make room.</p>`:''}
+      <div style="margin-top:16px">
+        <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:6px">Add items to memory:</label>
+        <input type="range" id="wm-slider" min="1" max="7" value="${filled}">
+        <div class="range-labels"><span>1 item</span><span>7 items (full)</span></div>
+      </div>
+    </div>`;
+}
+
+function attachWmEvents() {
+  const slider = document.getElementById('wm-slider');
+  if (!slider) return;
+  slider.addEventListener('input', e => {
+    L0.wm = Number(e.target.value);
+    const viz = document.getElementById('wm-viz');
+    if (viz) viz.outerHTML; // just re-render the inner div
+    renderLesson0();
+  });
+}
+
+// ── Stateless Viz ──────────────────────────────────────────
+
+function statelessVizHTML(msgs) {
+  const total = 20;
+  const nameGone = msgs >= total;
+  let msgSlots = '';
+  for (let i=0; i<total-1; i++) {
+    const on = i < msgs-1;
+    msgSlots += `<div class="msg-slot" style="background:${on?'rgba(255,255,255,0.05)':'rgba(255,255,255,0.02)'};border-color:${on?'var(--border)':'rgba(255,255,255,0.03)'};color:${on?'var(--muted)':'transparent'}">${i+2}</div>`;
+  }
+  return `
+    <div class="card" id="sm-viz">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+        <span style="font-size:11px;font-weight:600;color:var(--accent)">AI context window</span>
+        <span style="font-size:11px;color:${nameGone?'var(--red)':'var(--muted)'}">${msgs} / ${total} messages</span>
+      </div>
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;border-radius:8px;font-size:11px;margin-bottom:12px;transition:all 0.2s;background:${nameGone?'#f8717108':'#6366f110'};border:1px solid ${nameGone?'var(--red)':'var(--accent)'}">
+        <span style="color:${nameGone?'var(--red)':'var(--text)'}">msg 1: "My name is Human"</span>
+        <span style="font-weight:600;color:${nameGone?'var(--red)':'var(--accent)'}">${nameGone?'pushed out':'in context'}</span>
+      </div>
+      <div class="msg-grid">${msgSlots}</div>
+      ${nameGone?`<div style="display:flex;justify-content:space-between;padding:8px 12px;border-radius:8px;font-size:11px;margin-top:12px;background:#f8717108;border:1px solid var(--red)"><span style="color:var(--muted)">You ask: "What is my name?"</span><span style="font-weight:600;color:var(--red)">AI: "I don't know."</span></div>`:''}
+      <div style="margin-top:16px">
+        <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:6px">Send messages:</label>
+        <input type="range" id="sm-slider" min="1" max="20" value="${msgs}">
+        <div class="range-labels"><span>message 1</span><span style="color:${msgs>=20?'var(--red)':'var(--muted)'}">${msgs>=20?'name forgotten':'message '+msgs}</span></div>
+      </div>
+    </div>`;
+}
+
+function attachSmEvents() {
+  const slider = document.getElementById('sm-slider');
+  if (!slider) return;
+  slider.addEventListener('input', e => {
+    L0.sm = Number(e.target.value);
+    renderLesson0();
+  });
+}
+
+// ── Hallucination Viz ──────────────────────────────────────
+
+function hallucinationHTML() {
+  return `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+      <div class="card" style="border-color:#f59e0b44">
+        <div style="font-size:11px;font-weight:600;color:#f59e0b;margin-bottom:12px">The Human</div>
+        <div style="padding:8px 12px;border-radius:8px;font-size:11px;background:#f59e0b11;border:1px solid #f59e0b44;margin-bottom:12px">"Wait... what were we talking about?"</div>
+        <div style="font-size:11px;color:#4ade80">✓ Honest. You know not to trust.</div>
+      </div>
+      <div class="card" style="border-color:#f8717144">
+        <div style="font-size:11px;font-weight:600;color:var(--red);margin-bottom:12px">The AI</div>
+        <div style="padding:8px 12px;border-radius:8px;font-size:11px;background:#f8717111;border:1px solid #f8717144;margin-bottom:12px">"The answer is 42." <span style="color:var(--red)">✓</span></div>
+        <div style="font-size:11px;color:var(--red)">✗ Confident. Wrong. Trusted.</div>
+      </div>
+      <div style="grid-column:1/-1;padding:12px 16px;border-radius:12px;font-size:11px;text-align:center;background:#f8717108;border:1px solid #f8717133;color:var(--muted)">
+        Wrong + confident = <span style="color:var(--red);font-weight:600">hallucination</span>. This is the real danger.
+      </div>
+    </div>`;
+}
+
+// ── Stats ──────────────────────────────────────────────────
+
+function statsHTML() {
+  const stats = [
+    { value:"#1",    label:"Reason AI fails in production", source:"IBM Enterprise AI Report, 2023", detail:"Loss of conversational context" },
+    { value:"40-80%",label:"Accuracy improvement",         source:"RAG Research, 2023-24",          detail:"Agents with memory vs without" },
+    { value:"Middle",label:"Where models forget most",      source:"Liu et al., Stanford 2023",      detail:"Lost in the Middle paper" },
+  ];
+  return stats.map(s => `
+    <div class="card" style="display:flex;align-items:flex-start;gap:16px;margin-bottom:12px">
+      <div style="font-size:22px;font-weight:900;color:var(--accent);flex-shrink:0;min-width:60px">${h(s.value)}</div>
+      <div>
+        <p style="font-size:13px;font-weight:600">${h(s.label)}</p>
+        <p style="font-size:11px;color:var(--muted);margin-top:2px">${h(s.detail)}</p>
+        <p style="font-size:11px;color:rgba(255,255,255,0.2);margin-top:2px">${h(s.source)}</p>
+      </div>
+    </div>`).join('');
+}
+
+// ============================================================
+// MISSION 1
+// ============================================================
+
+let M1 = { slide:0, cw:1, pinned:false, selectedFacts:[], answers:{}, submitted:{}, builderTested:false, builderResponse:'', builderLoading:false, builderPassed:false, done:false };
+
+function initMission1() { renderMission1(); }
+
+function renderMission1() {
+  if (M1.done) { renderM1Done(); return; }
+  const s = M1_SLIDES[M1.slide];
+  const isLast = M1.slide === M1_SLIDES.length - 1;
+  const steps = M1_SLIDES.map((sl, i) => ({ label:sl.agenda, active:i===M1.slide, done:i<M1.slide }));
+
+  let visual = '';
+  if (s.visual === 'context-demo') visual = cwDemoHTML(M1.cw);
+  else if (s.visual === 'sticky-note') visual = stickyNoteHTML(M1.pinned);
+  else if (s.visual === 'builder')  visual = builderHTML();
+  else if (s.visual === 'quiz-1' || s.visual === 'quiz-2') visual = quizHTML(s.visual, M1_QUIZZES, M1);
+
+  const navRight = isLast
+    ? ''
+    : `<button class="nav-btn" onclick="m1Go(${M1.slide+1})">Next</button>`;
+
+  document.getElementById('app').innerHTML = `
+    <div class="page-sidebar">
+      ${sidebarHTML('mission-1', steps, '+100 XP on complete')}
+      <main class="main">
+        <div class="main-inner">
+          <div>
+            <span class="tag" style="background:${hexAlpha(s.tagColor,0.1)};color:${s.tagColor}">${h(s.tag)}</span>
+            <h1 class="slide-heading" style="margin-top:12px">${h(s.heading)}</h1>
+          </div>
+          ${s.body ? `<div class="slide-body">${s.body.split('\n\n').map(p=>`<p>${h(p)}</p>`).join('')}</div>` : ''}
+          ${s.image ? `<div class="slide-image"><img src="${h(s.image)}" alt="" loading="lazy"></div>` : ''}
+          ${visual ? `<div>${visual}</div>` : ''}
+          <div class="slide-nav">
+            <button class="nav-btn" onclick="m1Go(${M1.slide-1})" style="opacity:${M1.slide===0?0:1};pointer-events:${M1.slide===0?'none':'auto'}">Previous</button>
+            <div class="dots">${M1_SLIDES.map((_,i)=>`<button class="dot" onclick="m1Go(${i})" style="width:${i===M1.slide?'20px':'6px'};background:${i<M1.slide?'#4ade80':i===M1.slide?s.tagColor:'var(--border)'}"></button>`).join('')}</div>
+            ${navRight}
+          </div>
+        </div>
+      </main>
+    </div>`;
+
+  if (s.visual === 'context-demo') attachCwEvents();
+  if (s.visual === 'sticky-note')  attachStickyEvents();
+  if (s.visual === 'builder')      attachBuilderEvents();
+}
+
+function renderM1Done() {
+  document.getElementById('app').innerHTML = `
+    <div class="done-screen">
+      <div style="font-size:48px">🎯</div>
+      <div>
+        <h2 style="font-size:24px;font-weight:900">Mission 1 complete.</h2>
+        <p style="font-size:13px;margin-top:6px;color:var(--muted)">Context windows overflow. System prompts are the sticky note that never gets pushed out.</p>
+      </div>
+      <div style="padding:10px 20px;border-radius:12px;background:#1e1b4b;color:var(--accent);font-size:13px;font-weight:600">+100 XP earned</div>
+      <div style="display:flex;gap:12px">
+        <button class="btn btn-secondary" onclick="navigate('#home')">Course home</button>
+        <button class="btn btn-primary" onclick="navigate('#mission-2')">Mission 2: External Memory</button>
+      </div>
+    </div>`;
+}
+
+function m1Go(i) { M1.slide = Math.max(0, Math.min(M1_SLIDES.length-1, i)); renderMission1(); }
+
+// ── Context Window Demo ────────────────────────────────────
+
+function cwDemoHTML(msgs) {
+  const total = 20;
+  const nameGone = msgs >= total;
+  let slots = '';
+  for (let i=0; i<total-1; i++) {
+    const on = i < msgs-1;
+    slots += `<div class="msg-slot" style="background:${on?'rgba(255,255,255,0.05)':'rgba(255,255,255,0.02)'};border-color:${on?'var(--border)':'rgba(255,255,255,0.03)'};color:${on?'var(--muted)':'transparent'}">${i+2}</div>`;
+  }
+  return `
+    <div class="card" id="cw-viz">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+        <span style="font-size:11px;font-weight:600;color:var(--accent)">Context window</span>
+        <span style="font-size:11px;color:${nameGone?'var(--red)':'var(--muted)'}">${msgs} / ${total} slots</span>
+      </div>
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;border-radius:8px;font-size:11px;margin-bottom:12px;background:${nameGone?'#f8717108':'#6366f110'};border:1px solid ${nameGone?'var(--red)':'var(--accent)'}">
+        <span style="color:${nameGone?'var(--red)':'var(--text)'}">Message 1: "My name is Human"</span>
+        <span style="font-weight:600;color:${nameGone?'var(--red)':'var(--accent)'}">${nameGone?'pushed out':'in context'}</span>
+      </div>
+      <div class="msg-grid">${slots}</div>
+      ${nameGone?`<div style="display:flex;justify-content:space-between;padding:8px 12px;border-radius:8px;font-size:11px;margin-top:12px;background:#f8717108;border:1px solid var(--red)"><span style="color:var(--muted)">You ask: "What is my name?"</span><span style="font-weight:600;color:var(--red)">AI: "I don't know."</span></div>`:''}
+      <div style="margin-top:16px">
+        <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:6px">Send messages (watch slot 1):</label>
+        <input type="range" id="cw-slider" min="1" max="20" value="${msgs}">
+        <div class="range-labels"><span>1 message</span><span style="color:${msgs>=20?'var(--red)':'var(--muted)'}">${msgs>=20?'name forgotten':'message '+msgs}</span></div>
+      </div>
+    </div>`;
+}
+
+function attachCwEvents() {
+  const s = document.getElementById('cw-slider');
+  if (!s) return;
+  s.addEventListener('input', e => { M1.cw = Number(e.target.value); renderMission1(); });
+}
+
+// ── Sticky Note Demo ───────────────────────────────────────
+
+function stickyNoteHTML(pinned) {
+  return `
+    <div class="card" id="sticky-viz">
+      <div style="font-size:11px;font-weight:600;color:var(--accent);margin-bottom:12px">${pinned?'System prompt active':'No system prompt'}</div>
+      ${pinned?`<div style="padding:8px 12px;border-radius:8px;font-size:11px;font-family:'JetBrains Mono',monospace;background:#f59e0b10;border:2px solid #f59e0b;color:#f59e0b;margin-bottom:12px">SYSTEM: The user's name is Human. Always remember this.</div>`:''}
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;border-radius:8px;font-size:11px;margin-bottom:8px;background:#f8717108;border:1px solid ${pinned?'var(--border)':'var(--red)'}">
+        <span style="color:var(--muted)">Message 1: "My name is Human"</span>
+        <span style="color:${pinned?'var(--muted)':'var(--red)'}">${pinned?'doesn\'t matter':'pushed out'}</span>
+      </div>
+      <div style="font-size:11px;color:var(--muted);text-align:center;padding:4px 0;margin-bottom:8px">... 19 more messages ...</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;border-radius:8px;font-size:11px;background:var(--surface);border:1px solid var(--border)">
+        <span style="color:var(--muted)">You ask: "What is my name?"</span>
+        <span style="font-weight:600;color:${pinned?'#4ade80':'var(--red)'}">${pinned?'Human ✓':'I don\'t know ✗'}</span>
+      </div>
+    </div>
+    <button id="sticky-btn" onclick="toggleSticky()" style="width:100%;padding:10px;border-radius:12px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;background:${pinned?'var(--surface)':'#f59e0b'};border:${pinned?'1px solid var(--border)':'none'};color:${pinned?'var(--muted)':'#000'}">
+      ${pinned?'Remove system prompt':'Add system prompt (sticky note)'}
+    </button>
+    <p style="font-size:11px;color:var(--muted)">${pinned?'The system prompt sits above the context window. It never scrolls out.':'Without a system prompt, the name gets pushed out when context fills.'}</p>`;
+}
+
+function attachStickyEvents() {
+  // button is inline onclick, nothing extra needed
+}
+
+function toggleSticky() {
+  M1.pinned = !M1.pinned;
+  renderMission1();
+}
+
+// ── Prompt Builder ─────────────────────────────────────────
+
+function builderHTML() {
+  const apiKey = getApiKey();
+  const sel = M1.selectedFacts;
+
+  const promptLines = ['You are a helpful assistant.', ...PROMPT_FACTS.filter(f=>sel.includes(f.id)).map(f=>f.value)];
+  const prompt = promptLines.join('\n');
+
+  let factsHTML = '';
+  PROMPT_FACTS.forEach(f => {
+    const on = sel.includes(f.id);
+    factsHTML += `
+      <button class="fact-btn" onclick="toggleFact('${f.id}')" style="background:${on?hexAlpha(f.color,0.1):'var(--surface)'};border:1px solid ${on?f.color:'var(--border)'};color:${on?f.color:'var(--muted)'}">
+        <span style="font-weight:700">${on?'✓':'+'}</span>${h(f.label)}
+      </button>`;
+  });
+
+  return `
+    <div id="builder-wrap">
+      ${!apiKey ? `
+        <div class="card" style="margin-bottom:16px">
+          <p style="font-size:11px;font-weight:600;color:var(--amber);margin-bottom:8px">Anthropic API key required</p>
+          <p style="font-size:11px;color:var(--muted);margin-bottom:10px">Your key is stored only in your browser's localStorage and sent only to api.anthropic.com.</p>
+          <div style="display:flex;gap:8px">
+            <input type="password" id="api-key-input" placeholder="sk-ant-..." style="flex:1">
+            <button onclick="saveApiKeyFromInput()" style="padding:8px 14px;border-radius:8px;background:var(--accent);color:white;font-size:12px;font-weight:600;font-family:inherit;cursor:pointer;border:none">Save</button>
+          </div>
+        </div>` : ''}
+
+      <p style="font-size:13px;color:rgba(255,255,255,0.65);margin-bottom:16px">
+        Toggle facts to add to the system prompt. Then test — the AI will answer:
+        "What is my name and what account do I have?"
+      </p>
+
+      <div class="fact-grid" style="margin-bottom:16px">${factsHTML}</div>
+
+      <div class="card" style="margin-bottom:16px">
+        <p style="font-size:11px;font-weight:600;color:#f59e0b;margin-bottom:8px">System prompt preview:</p>
+        <pre style="font-size:11px;line-height:1.6;white-space:pre-wrap;color:var(--muted)">${h(prompt)}</pre>
+      </div>
+
+      <button id="test-btn" onclick="runBuilderTest()" ${(sel.length===0||M1.builderLoading)?'disabled':''} style="width:100%;padding:10px;border-radius:12px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;background:var(--surface);border:1px solid var(--accent);color:var(--accent);opacity:${sel.length===0?'0.4':'1'}">
+        ${M1.builderLoading?'Testing...':'Test the system prompt'}
+      </button>
+
+      ${M1.builderResponse ? `
+        <div class="card" style="margin-top:12px">
+          <p style="font-size:11px;font-weight:600;color:var(--muted);margin-bottom:6px">AI response:</p>
+          <p style="font-size:13px">${h(M1.builderResponse)}</p>
+        </div>` : ''}
+
+      ${M1.builderTested && !sel.includes('name') ? `
+        <p style="font-size:11px;color:var(--red);margin-top:8px">AI does not know the name. Add "User's name" to the system prompt and test again.</p>` : ''}
+
+      ${M1.builderPassed ? `
+        <button onclick="m1Finish()" style="width:100%;padding:12px;border-radius:12px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;background:var(--accent);color:white;border:none;margin-top:8px">
+          Complete Mission 1 and claim 100 XP
+        </button>` : ''}
+    </div>`;
+}
+
+function attachBuilderEvents() {}
+
+function saveApiKeyFromInput() {
+  const input = document.getElementById('api-key-input');
+  if (!input || !input.value.trim()) return;
+  setApiKey(input.value.trim());
+  renderMission1();
+}
+
+function toggleFact(id) {
+  if (M1.selectedFacts.includes(id)) {
+    M1.selectedFacts = M1.selectedFacts.filter(x => x !== id);
+  } else {
+    M1.selectedFacts = [...M1.selectedFacts, id];
+  }
+  M1.builderResponse = '';
+  M1.builderTested = false;
+  M1.builderPassed = false;
+  renderMission1();
+}
+
+async function runBuilderTest() {
+  const apiKey = getApiKey();
+  if (!apiKey) { alert('Enter your Anthropic API key first.'); return; }
+  if (M1.selectedFacts.length === 0) return;
+
+  M1.builderLoading = true;
+  M1.builderResponse = '';
+  M1.builderTested = false;
+  renderMission1();
+
+  const promptLines = ['You are a helpful assistant.', ...PROMPT_FACTS.filter(f=>M1.selectedFacts.includes(f.id)).map(f=>f.value)];
+  const systemPrompt = promptLines.join('\n');
+
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true',
+      },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 256,
+        system: systemPrompt,
+        messages: [{ role:'user', content:'What is my name and what account do I have?' }],
+      }),
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      M1.builderResponse = err.error?.message || 'API request failed. Check your key.';
+    } else {
+      const data = await res.json();
+      M1.builderResponse = data.content?.[0]?.text || 'No response.';
+    }
+  } catch (e) {
+    M1.builderResponse = 'Network error: ' + e.message;
+  }
+
+  M1.builderLoading = false;
+  M1.builderTested = true;
+  M1.builderPassed = M1.selectedFacts.includes('name') && M1.selectedFacts.length >= 2 && !M1.builderResponse.includes('failed') && !M1.builderResponse.includes('error');
+  renderMission1();
+}
+
+async function m1Finish() {
+  completeMission(1, 100);
+  M1.done = true;
+  renderM1Done();
+}
+
+// ============================================================
+// COMING SOON
+// ============================================================
+
+function renderComingSoon(num) {
+  document.getElementById('app').innerHTML = `
+    <div class="coming-soon">
+      <div style="font-size:40px">🔒</div>
+      <h2 style="font-size:20px;font-weight:700">Mission ${num} — Coming Soon</h2>
+      <p style="font-size:13px;color:var(--muted)">Complete earlier missions to unlock this.</p>
+      <button class="btn btn-secondary" onclick="navigate('#home')" style="margin-top:8px">← Course home</button>
+    </div>`;
+}
+
+// ============================================================
+// ROUTER
+// ============================================================
+
+function render() {
+  const hash = location.hash.slice(1) || 'home';
+  if (hash === 'home' || hash === '') renderHome();
+  else if (hash === 'lesson-0') initLesson0();
+  else if (hash === 'mission-1') initMission1();
+  else {
+    const m = hash.match(/^mission-(\d+)$/);
+    if (m) renderComingSoon(m[1]);
+    else renderHome();
+  }
+}
+
+window.addEventListener('hashchange', render);
+window.addEventListener('DOMContentLoaded', render);
+</script>
+</body>
+</html>
